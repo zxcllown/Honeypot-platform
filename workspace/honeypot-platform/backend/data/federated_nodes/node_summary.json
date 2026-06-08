@@ -1,0 +1,95 @@
+{
+  "node_id": "local-node-1",
+  "node_region": "local-lab",
+  "generated_at": "2026-06-08T09:05:33.059146+00:00",
+  "model_version": "v1.0",
+  "privacy_mode": "aggregated_only_no_raw_logs",
+  "telemetry": {
+    "sessions_analyzed": 1,
+    "avg_severity": 1.0,
+    "max_severity": 1.0,
+    "top_behaviors": [
+      [
+        "execution_error_detected",
+        1
+      ],
+      [
+        "inline_script_execution",
+        1
+      ],
+      [
+        "network_blocked_by_sandbox",
+        1
+      ],
+      [
+        "privilege_escalation_attempt",
+        1
+      ],
+      [
+        "process_spawn_detected",
+        1
+      ],
+      [
+        "reverse_shell_attempt",
+        1
+      ],
+      [
+        "sensitive_file_access",
+        1
+      ],
+      [
+        "syscall_network_connect",
+        1
+      ]
+    ],
+    "top_indicators": [
+      [
+        "/dev/tcp/10.10.10.10/9001",
+        1
+      ],
+      [
+        "/var/run/nscd/socket",
+        1
+      ]
+    ],
+    "top_attack_chains": [
+      [
+        "Discovery -> Execution -> Command and Control -> Privilege Escalation",
+        1
+      ]
+    ]
+  },
+  "adaptive": {
+    "recommendations_total": 5,
+    "by_status": {
+      "applied": 5
+    },
+    "by_priority": {
+      "high": 2,
+      "medium": 2,
+      "critical": 1
+    },
+    "top_actions": [
+      [
+        "deploy_c2_decoy_listener",
+        1
+      ],
+      [
+        "deploy_fake_credentials",
+        1
+      ],
+      [
+        "enable_fake_sudo_responses",
+        1
+      ],
+      [
+        "increase_network_telemetry_level",
+        1
+      ],
+      [
+        "notify_analyst_high_severity",
+        1
+      ]
+    ]
+  }
+}

@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #09090b;
+  --card: #111114;
+
+  --border: #27272a;
+
+  --primary: #8b5cf6;
+  --primary-soft: #a78bfa;
+
+  --text: #fafafa;
+  --muted: #a1a1aa;
+}
+
+body {
+  background: linear-gradient(
+    180deg,
+    #09090b 0%,
+    #0f0f12 100%
+  );
+
+  color: var(--text);
+
+  min-height: 100vh;
+}
