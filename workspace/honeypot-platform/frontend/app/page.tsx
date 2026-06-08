@@ -57,6 +57,12 @@ export default function DashboardPage() {
 
         <Section title="Top Attack Chains">
           <PairList items={data.top_attack_chains} />
+          <a
+            href="/attack-chain"
+  className="mt-5 inline-flex rounded-full border border-violet-500/30 bg-violet-500/10 px-5 py-2 text-sm text-violet-300 hover:bg-violet-500/20"
+>
+  Open Attack Chain Explorer
+</a>
         </Section>
 
         <Section title="Adaptive Status">
