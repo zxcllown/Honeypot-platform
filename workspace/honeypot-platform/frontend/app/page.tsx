@@ -15,7 +15,7 @@ export default function DashboardPage() {
 
   if (!data) {
     return (
-      <main className="min-h-screen bg-gradient-to-b from-zinc-950 via-black to-zinc-950 p-10 text-zinc-100">
+      <main className="mx-auto max-w-7xl p-10">
         <h1 className="text-5xl font-black tracking-tight bg-gradient-to-r from-violet-400 via-fuchsia-400 to-purple-500 bg-clip-text text-transparent">
           Loading...
         </h1>
@@ -24,7 +24,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-zinc-950 via-black to-zinc-950 p-10 text-zinc-100">
+    <main className="mx-auto max-w-7xl p-10">
       <div className="mb-10">
         <h1 className="text-5xl font-black tracking-tight bg-gradient-to-r from-violet-400 via-fuchsia-400 to-purple-500 bg-clip-text text-transparent">
           Honeypot Platform
