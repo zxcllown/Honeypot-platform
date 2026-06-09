@@ -8,12 +8,13 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Cookie, Depends, Header, HTTPException, status
 
 
 DB_PATH = Path(__file__).resolve().parents[2] / "data" / "telemetry.db"
 PBKDF2_ITERATIONS = 260_000
 TOKEN_TTL_HOURS = 12
+ACCESS_TOKEN_COOKIE = "honeypot_access_token"
 
 
 @dataclass(frozen=True)
@@ -177,11 +178,14 @@ def create_access_token(user_id: int):
     return raw_token, expires_at.isoformat()
 
 
-def parse_bearer(authorization: str | None):
+def parse_access_token(authorization: str | None, cookie_token: str | None):
+    if cookie_token:
+        return cookie_token
+
     if not authorization:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing Authorization header",
+            detail="Missing access token",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -198,9 +202,10 @@ def parse_bearer(authorization: str | None):
 
 def get_current_user(
     authorization: Annotated[str | None, Header(alias="Authorization")] = None,
+    cookie_token: Annotated[str | None, Cookie(alias=ACCESS_TOKEN_COOKIE)] = None,
 ):
     ensure_security_schema()
-    token = parse_bearer(authorization)
+    token = parse_access_token(authorization, cookie_token)
     hashed = token_hash(token)
 
     with connect() as conn:

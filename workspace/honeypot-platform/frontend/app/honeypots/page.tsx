@@ -17,7 +17,7 @@ import {
 
 const API = process.env.NEXT_PUBLIC_API_URL;
 
-type HoneypotStatus = "running" | "stopped" | "restarting" | "maintenance";
+type HoneypotStatus = "running" | "stopped" | "maintenance";
 
 type HoneypotNode = {
   node_id: string;
@@ -109,12 +109,12 @@ export default function HoneypotsPage() {
     }
   }
 
-  async function action(nodeId: string, actionName: "enable" | "disable" | "restart") {
+  async function action(nodeId: string, actionName: "enable" | "disable") {
     setBusy(`${nodeId}-${actionName}`);
     setNotice(null);
     try {
       await requestJson(`/honeypots/${nodeId}/${actionName}`, { method: "POST" });
-      window.setTimeout(load, actionName === "restart" ? 900 : 150);
+      window.setTimeout(load, 150);
     } catch (actionError) {
       setNotice({
         tone: "red",
@@ -123,7 +123,7 @@ export default function HoneypotsPage() {
     } finally {
       window.setTimeout(() => {
         setBusy(null);
-      }, actionName === "restart" ? 1200 : 250);
+      }, 250);
     }
   }
 
@@ -297,10 +297,8 @@ function NodeCard({
 }: {
   node: HoneypotNode;
   busy: string | null;
-  onAction: (nodeId: string, actionName: "enable" | "disable" | "restart") => void;
+  onAction: (nodeId: string, actionName: "enable" | "disable") => void;
 }) {
-  const visibleStatus = busy === "restart" ? "restarting" : node.status;
-
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
       <div className="mb-5 flex items-start justify-between gap-4">
@@ -308,7 +306,7 @@ function NodeCard({
           <h2 className="truncate text-base font-semibold text-white">{node.name}</h2>
           <p className="mt-1 font-mono text-xs text-emerald-100">{node.node_id}</p>
         </div>
-        <Status value={visibleStatus} />
+        <Status value={node.status} />
       </div>
 
       <InfoGrid
@@ -320,18 +318,6 @@ function NodeCard({
           ["Updated", node.updated_at],
         ]}
       />
-
-      {busy === "restart" ? (
-        <div className="mt-5 rounded-2xl border border-violet-300/20 bg-violet-300/10 p-4">
-          <div className="mb-3 flex items-center justify-between text-sm">
-            <span className="text-violet-100">Restart sequence</span>
-            <span className="text-zinc-400">health probe</span>
-          </div>
-          <div className="h-2 overflow-hidden rounded-full bg-white/10">
-            <div className="liquid-progress h-2 w-3/4 rounded-full" />
-          </div>
-        </div>
-      ) : null}
 
       <div className="mt-6 flex flex-wrap gap-3">
         <ButtonLink href={`/honeypots/${node.node_id}`} tone="zinc">Inspect</ButtonLink>
@@ -348,13 +334,6 @@ function NodeCard({
           disabled={busy !== null || node.status !== "running"}
         >
           Disable
-        </ActionButton>
-        <ActionButton
-          onClick={() => onAction(node.node_id, "restart")}
-          tone="violet"
-          disabled={busy !== null}
-        >
-          Restart
         </ActionButton>
       </div>
     </div>
@@ -390,7 +369,6 @@ function Field({
 
 function Status({ value }: { value: string }) {
   if (value === "running") return <Badge tone="emerald">running</Badge>;
-  if (value === "restarting") return <Badge tone="amber">restarting</Badge>;
   if (value === "maintenance") return <Badge tone="violet">maintenance</Badge>;
   return <Badge tone="red">{value}</Badge>;
 }

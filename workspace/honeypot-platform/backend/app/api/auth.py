@@ -1,8 +1,10 @@
 from pydantic import BaseModel
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from app.api.security import (
+    ACCESS_TOKEN_COOKIE,
     CurrentUser,
+    TOKEN_TTL_HOURS,
     claim_unowned_data,
     connect,
     create_access_token,
@@ -77,6 +79,27 @@ def validate_user_payload(email: str, username: str, password: str):
     return email, username
 
 
+def set_auth_cookie(response: Response, access_token: str):
+    response.set_cookie(
+        key=ACCESS_TOKEN_COOKIE,
+        value=access_token,
+        max_age=TOKEN_TTL_HOURS * 60 * 60,
+        httponly=True,
+        samesite="lax",
+        secure=False,
+        path="/",
+    )
+
+
+def clear_auth_cookie(response: Response):
+    response.delete_cookie(
+        key=ACCESS_TOKEN_COOKIE,
+        path="/",
+        samesite="lax",
+        secure=False,
+    )
+
+
 @router.get("/bootstrap-status")
 def bootstrap_status():
     return {
@@ -85,7 +108,7 @@ def bootstrap_status():
 
 
 @router.post("/bootstrap")
-def bootstrap_owner(payload: BootstrapRequest):
+def bootstrap_owner(payload: BootstrapRequest, response: Response):
     if users_count() > 0:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
@@ -120,6 +143,7 @@ def bootstrap_owner(payload: BootstrapRequest):
 
     claim_unowned_data(user_id)
     access_token, expires_at = create_access_token(user_id)
+    set_auth_cookie(response, access_token)
 
     return {
         "access_token": access_token,
@@ -138,7 +162,7 @@ def bootstrap_owner(payload: BootstrapRequest):
 
 
 @router.post("/login")
-def login(payload: LoginRequest):
+def login(payload: LoginRequest, response: Response):
     email = payload.email.strip().lower()
 
     with connect() as conn:
@@ -159,6 +183,7 @@ def login(payload: LoginRequest):
         )
 
     access_token, expires_at = create_access_token(user["id"])
+    set_auth_cookie(response, access_token)
 
     return {
         "access_token": access_token,
@@ -179,7 +204,10 @@ def me(current_user: CurrentUser = Depends(get_current_user)):
 
 
 @router.post("/logout")
-def logout(current_user: CurrentUser = Depends(get_current_user)):
+def logout(
+    response: Response,
+    current_user: CurrentUser = Depends(get_current_user),
+):
     with connect() as conn:
         conn.execute(
             "UPDATE api_tokens SET revoked_at = ? WHERE token_hash = ?",
@@ -187,6 +215,7 @@ def logout(current_user: CurrentUser = Depends(get_current_user)):
         )
         conn.commit()
 
+    clear_auth_cookie(response)
     return {"status": "ok"}
 
 

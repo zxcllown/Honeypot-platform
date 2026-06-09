@@ -17,7 +17,7 @@ import {
 
 const API = process.env.NEXT_PUBLIC_API_URL;
 
-type HoneypotStatus = "running" | "stopped" | "restarting" | "maintenance";
+type HoneypotStatus = "running" | "stopped" | "maintenance";
 
 type HoneypotNode = {
   node_id: string;
@@ -95,7 +95,7 @@ export default function HoneypotDetailPage() {
     }
   }
 
-  async function lifecycle(actionName: "enable" | "disable" | "restart") {
+  async function lifecycle(actionName: "enable" | "disable") {
     setBusy(actionName);
     setNotice(null);
     try {
@@ -110,7 +110,7 @@ export default function HoneypotDetailPage() {
         message: actionError instanceof Error ? actionError.message : "Action failed",
       });
     } finally {
-      window.setTimeout(() => setBusy(null), actionName === "restart" ? 900 : 150);
+      window.setTimeout(() => setBusy(null), 150);
     }
   }
 
@@ -130,8 +130,6 @@ export default function HoneypotDetailPage() {
   }
 
   if (!node) return <LoadingState title="Loading honeypot" />;
-
-  const displayStatus = busy === "restart" ? "restarting" : node.status;
 
   return (
     <PageShell>
@@ -157,16 +155,13 @@ export default function HoneypotDetailPage() {
             >
               Disable
             </ActionButton>
-            <ActionButton onClick={() => lifecycle("restart")} disabled={busy !== null}>
-              Restart
-            </ActionButton>
           </>
         }
         stats={
           <div className="grid gap-4 md:grid-cols-3">
             <MetricCard
               title="Status"
-              value={<Status value={displayStatus} />}
+              value={<Status value={node.status} />}
               detail="current lifecycle state"
               tone={node.status === "running" ? "emerald" : "red"}
             />
@@ -190,18 +185,6 @@ export default function HoneypotDetailPage() {
               ["Updated", node.updated_at ?? "-"],
             ]}
           />
-
-          {busy === "restart" ? (
-            <div className="mt-5 rounded-2xl border border-violet-300/20 bg-violet-300/10 p-4">
-              <div className="mb-3 flex items-center justify-between text-sm">
-                <span className="text-violet-100">Restart sequence</span>
-                <span className="text-zinc-400">health probe</span>
-              </div>
-              <div className="h-2 overflow-hidden rounded-full bg-white/10">
-                <div className="liquid-progress h-2 w-3/4 rounded-full" />
-              </div>
-            </div>
-          ) : null}
         </Panel>
 
         <Panel title="Edit Honeypot" variant="table" action={<Badge tone="emerald">user owned</Badge>}>
@@ -344,7 +327,6 @@ function Field({
 
 function Status({ value }: { value: string }) {
   if (value === "running") return <Badge tone="emerald">running</Badge>;
-  if (value === "restarting") return <Badge tone="amber">restarting</Badge>;
   if (value === "maintenance") return <Badge tone="violet">maintenance</Badge>;
   return <Badge tone="red">{value}</Badge>;
 }

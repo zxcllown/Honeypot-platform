@@ -17,7 +17,7 @@ import {
 
 const API = process.env.NEXT_PUBLIC_API_URL;
 
-type ActionName = "enable" | "disable" | "restart";
+type ActionName = "enable" | "disable";
 
 type HoneypotNode = {
   node_id: string;
@@ -69,14 +69,6 @@ const actionCopy: Record<
     tone: "red",
     steps: ["stop listener", "close exposed port", "publish stopped state"],
   },
-  restart: {
-    kicker: "Lifecycle action",
-    title: "Restart Honeypot",
-    description: "Drain, reload, rebind, and health-check the honeypot as a real restart sequence.",
-    button: "Run restart",
-    tone: "violet",
-    steps: ["drain existing connections", "reload honeypot profile", "bind listening socket", "health probe"],
-  },
 };
 
 export default function HoneypotActionPage({ action }: { action: ActionName }) {
@@ -105,7 +97,7 @@ export default function HoneypotActionPage({ action }: { action: ActionName }) {
       const fresh = await fetch(`${API}/honeypots/${nodeId}`).then((res) => res.json());
       setNode(fresh);
     } finally {
-      window.setTimeout(() => setRunning(false), action === "restart" ? 900 : 250);
+      window.setTimeout(() => setRunning(false), 250);
     }
   }
 
@@ -148,7 +140,7 @@ export default function HoneypotActionPage({ action }: { action: ActionName }) {
           </div>
         </Panel>
 
-        <Panel title={action === "restart" ? "Restart Sequence" : "Execution Plan"} variant="control">
+        <Panel title="Execution Plan" variant="control">
           <div className="space-y-4">
             {phases.map((phase: string, index: number) => {
               const complete = Boolean(result) || (running && index < 2);

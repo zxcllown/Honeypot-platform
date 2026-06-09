@@ -31,29 +31,19 @@ export default function AuthGate({ children }: { children: ReactNode }) {
 
     installAuthorizedFetch();
 
-    const token = localStorage.getItem(TOKEN_KEY);
-    if (token) {
-      fetch(`${API}/auth/me`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+    fetch(`${API}/auth/me`, { credentials: "include" })
+      .then((res) => {
+        if (!res.ok) throw new Error("Session expired");
+        return res.json();
       })
-        .then((res) => {
-          if (!res.ok) throw new Error("Session expired");
-          return res.json();
-        })
-        .then((payload: User) => {
-          setUser(payload);
-          setStatus("ready");
-        })
-        .catch(() => {
-          localStorage.removeItem(TOKEN_KEY);
-          loadBootstrapStatus(setStatus, setError);
-        });
-      return;
-    }
-
-    loadBootstrapStatus(setStatus, setError);
+      .then((payload: User) => {
+        setUser(payload);
+        setStatus("ready");
+      })
+      .catch(() => {
+        localStorage.removeItem(TOKEN_KEY);
+        loadBootstrapStatus(setStatus, setError);
+      });
   }, []);
 
   const authContext = useMemo(() => ({ user }), [user]);
@@ -90,7 +80,19 @@ export default function AuthGate({ children }: { children: ReactNode }) {
     );
   }
 
-  return <AuthContextMarker value={authContext}>{children}</AuthContextMarker>;
+  return (
+    <AuthContextMarker value={authContext}>
+      <SessionBar
+        user={user}
+        onLogout={() => {
+          localStorage.removeItem(TOKEN_KEY);
+          setUser(null);
+          loadBootstrapStatus(setStatus, setError);
+        }}
+      />
+      {children}
+    </AuthContextMarker>
+  );
 }
 
 function AuthContextMarker({
@@ -126,6 +128,7 @@ function AuthScreen({
     try {
       const response = await fetch(`${API}/auth/${mode}`, {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
         },
@@ -201,6 +204,52 @@ function AuthScreen({
   );
 }
 
+function SessionBar({
+  user,
+  onLogout,
+}: {
+  user: User | null;
+  onLogout: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+
+  if (!user || !API) return null;
+
+  async function logout() {
+    setBusy(true);
+    try {
+      await fetch(`${API}/auth/logout`, {
+        method: "POST",
+        credentials: "include",
+      });
+    } finally {
+      setBusy(false);
+      onLogout();
+    }
+  }
+
+  return (
+    <div className="border-b border-white/10 bg-black/30 px-5 py-2 text-sm text-zinc-300 sm:px-8">
+      <div className="mx-auto flex max-w-7xl flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <span className="text-zinc-500">Signed in as </span>
+          <span className="font-medium text-white">{user.email}</span>
+          <span className="ml-2 rounded-lg border border-emerald-300/20 bg-emerald-300/10 px-2 py-0.5 text-xs text-emerald-100">
+            {user.role}
+          </span>
+        </div>
+        <button
+          onClick={logout}
+          disabled={busy}
+          className="w-fit rounded-lg border border-white/10 bg-white/[0.045] px-3 py-1.5 text-xs text-zinc-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {busy ? "Signing out..." : "Sign out"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function Field({
   label,
   value,
@@ -229,7 +278,7 @@ function loadBootstrapStatus(
   setStatus: (status: "login" | "bootstrap") => void,
   setError: (message: string | null) => void,
 ) {
-  fetch(`${API}/auth/bootstrap-status`)
+  fetch(`${API}/auth/bootstrap-status`, { credentials: "include" })
     .then((res) => res.json())
     .then((payload: { bootstrap_required: boolean }) => {
       setStatus(payload.bootstrap_required ? "bootstrap" : "login");
@@ -250,7 +299,7 @@ function installAuthorizedFetch() {
 
   if (win[marker]) return;
 
-  const originalFetch = window.fetch.bind(window);
+    const originalFetch = window.fetch.bind(window);
   window.fetch = (input, init = {}) => {
     const token = localStorage.getItem(TOKEN_KEY);
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
@@ -260,7 +309,11 @@ function installAuthorizedFetch() {
       if (!headers.has("Authorization")) {
         headers.set("Authorization", `Bearer ${token}`);
       }
-      return originalFetch(input, { ...init, headers });
+      return originalFetch(input, { ...init, credentials: init.credentials ?? "include", headers });
+    }
+
+    if (API && url.startsWith(API)) {
+      return originalFetch(input, { ...init, credentials: init.credentials ?? "include" });
     }
 
     return originalFetch(input, init);

@@ -12,7 +12,7 @@ from app.api.security import CurrentUser, get_current_user
 router = APIRouter(prefix="/honeypots", tags=["honeypots"])
 
 DB_PATH = Path(__file__).resolve().parents[2] / "data" / "telemetry.db"
-HoneypotStatus = Literal["running", "stopped", "restarting", "maintenance"]
+HoneypotStatus = Literal["running", "stopped", "maintenance"]
 
 
 class HoneypotCreate(BaseModel):
@@ -244,40 +244,4 @@ def disable_honeypot(
         "action": "disable",
         "status": node["status"],
         "node": node,
-    }
-
-
-@router.post("/{node_id}/restart")
-def restart_honeypot(
-    node_id: str,
-    current_user: CurrentUser = Depends(get_current_user),
-):
-    started_at = iso_now()
-    node = set_status(node_id, current_user.id, "running")
-
-    return {
-        "node_id": node_id,
-        "action": "restart",
-        "status": node["status"],
-        "started_at": started_at,
-        "node": node,
-        "phases": [
-            {
-                "name": "drain_existing_connections",
-                "status": "completed",
-            },
-            {
-                "name": "reload_honeypot_profile",
-                "status": "completed",
-            },
-            {
-                "name": "bind_listening_socket",
-                "status": "completed",
-            },
-            {
-                "name": "health_probe",
-                "status": "completed",
-            },
-        ],
-        "message": "Honeypot restarted and returned to running state",
     }
