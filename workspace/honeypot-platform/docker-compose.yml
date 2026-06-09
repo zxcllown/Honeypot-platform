@@ -20,7 +20,8 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:8000}
+        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-}
+        INTERNAL_API_URL: ${INTERNAL_API_URL:-http://backend:8000}
     container_name: honeypot-frontend
     restart: unless-stopped
     ports:

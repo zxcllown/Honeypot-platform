@@ -2,7 +2,7 @@
 
 import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 
-const API = process.env.NEXT_PUBLIC_API_URL;
+const API = process.env.NEXT_PUBLIC_API_URL || "/api";
 const TOKEN_KEY = "honeypot_access_token";
 
 type User = {
@@ -18,17 +18,11 @@ type AuthResponse = {
 };
 
 export default function AuthGate({ children }: { children: ReactNode }) {
-  const [status, setStatus] = useState<"checking" | "login" | "bootstrap" | "ready">(
-    API ? "checking" : "ready",
-  );
+  const [status, setStatus] = useState<"checking" | "login" | "bootstrap" | "ready">("checking");
   const [user, setUser] = useState<User | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!API) {
-      return;
-    }
-
     installAuthorizedFetch();
 
     fetch(`${API}/auth/me`, { credentials: "include" })
@@ -213,7 +207,7 @@ function SessionBar({
 }) {
   const [busy, setBusy] = useState(false);
 
-  if (!user || !API) return null;
+  if (!user) return null;
 
   async function logout() {
     setBusy(true);
@@ -299,12 +293,12 @@ function installAuthorizedFetch() {
 
   if (win[marker]) return;
 
-    const originalFetch = window.fetch.bind(window);
+  const originalFetch = window.fetch.bind(window);
   window.fetch = (input, init = {}) => {
     const token = localStorage.getItem(TOKEN_KEY);
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
 
-    if (token && API && url.startsWith(API)) {
+    if (token && isApiRequest(url)) {
       const headers = new Headers(init.headers);
       if (!headers.has("Authorization")) {
         headers.set("Authorization", `Bearer ${token}`);
@@ -312,7 +306,7 @@ function installAuthorizedFetch() {
       return originalFetch(input, { ...init, credentials: init.credentials ?? "include", headers });
     }
 
-    if (API && url.startsWith(API)) {
+    if (isApiRequest(url)) {
       return originalFetch(input, { ...init, credentials: init.credentials ?? "include" });
     }
 
@@ -320,4 +314,12 @@ function installAuthorizedFetch() {
   };
 
   win[marker] = true;
+}
+
+function isApiRequest(url: string) {
+  if (API.startsWith("/")) {
+    return url.startsWith(API) || url.includes(`${window.location.origin}${API}`);
+  }
+
+  return url.startsWith(API);
 }
