@@ -3,6 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from app.api.security import (
     ACCESS_TOKEN_COOKIE,
+    COOKIE_SAMESITE,
+    COOKIE_SECURE,
     CurrentUser,
     TOKEN_TTL_HOURS,
     claim_unowned_data,
@@ -85,8 +87,8 @@ def set_auth_cookie(response: Response, access_token: str):
         value=access_token,
         max_age=TOKEN_TTL_HOURS * 60 * 60,
         httponly=True,
-        samesite="lax",
-        secure=False,
+        samesite=COOKIE_SAMESITE,
+        secure=COOKIE_SECURE,
         path="/",
     )
 
@@ -95,8 +97,8 @@ def clear_auth_cookie(response: Response):
     response.delete_cookie(
         key=ACCESS_TOKEN_COOKIE,
         path="/",
-        samesite="lax",
-        secure=False,
+        samesite=COOKIE_SAMESITE,
+        secure=COOKIE_SECURE,
     )
 
 

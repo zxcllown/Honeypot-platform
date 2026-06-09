@@ -1,5 +1,6 @@
 import json
 import sqlite3
+import os
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -9,7 +10,13 @@ from app.api.security import CurrentUser, get_current_user
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
-DB_PATH = Path(__file__).resolve().parents[2] / "data" / "telemetry.db"
+DB_PATH = Path(
+    os.getenv(
+        "HONEYPOT_DB_PATH",
+        str(Path(__file__).resolve().parents[2] / "data" / "telemetry.db"),
+    )
+)
+DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 
 def safe_json_loads(value, default):

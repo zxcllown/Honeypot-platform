@@ -1,4 +1,5 @@
 import sqlite3
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
@@ -11,7 +12,13 @@ from app.api.security import CurrentUser, get_current_user
 
 router = APIRouter(prefix="/honeypots", tags=["honeypots"])
 
-DB_PATH = Path(__file__).resolve().parents[2] / "data" / "telemetry.db"
+DB_PATH = Path(
+    os.getenv(
+        "HONEYPOT_DB_PATH",
+        str(Path(__file__).resolve().parents[2] / "data" / "telemetry.db"),
+    )
+)
+DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 HoneypotStatus = Literal["running", "stopped", "maintenance"]
 
 

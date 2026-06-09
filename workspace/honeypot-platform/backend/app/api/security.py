@@ -11,10 +11,18 @@ from typing import Annotated
 from fastapi import Cookie, Depends, Header, HTTPException, status
 
 
-DB_PATH = Path(__file__).resolve().parents[2] / "data" / "telemetry.db"
+DB_PATH = Path(
+    os.getenv(
+        "HONEYPOT_DB_PATH",
+        str(Path(__file__).resolve().parents[2] / "data" / "telemetry.db"),
+    )
+)
+DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 PBKDF2_ITERATIONS = 260_000
 TOKEN_TTL_HOURS = 12
 ACCESS_TOKEN_COOKIE = "honeypot_access_token"
+COOKIE_SECURE = os.getenv("AUTH_COOKIE_SECURE", "false").lower() == "true"
+COOKIE_SAMESITE = os.getenv("AUTH_COOKIE_SAMESITE", "lax")
 
 
 @dataclass(frozen=True)

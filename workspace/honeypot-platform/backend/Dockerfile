@@ -1,25 +1,18 @@
 FROM python:3.12-slim
 
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y \
-    docker.io \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY shared /tmp/shared
-RUN pip install /tmp/shared
-
-COPY backend/requirements.txt .
+COPY backend/requirements.txt /tmp/requirements.txt
 RUN pip install --upgrade pip && \
-    pip install --no-cache-dir \
-    --timeout 120 \
-    --retries 10 \
-    -r requirements.txt
+    pip install --no-cache-dir -r /tmp/requirements.txt
 
-COPY backend .
-COPY ml-models /ml-models
+COPY backend /app
 
-ENV PYTHONPATH=/app:/ml-models
+ENV HONEYPOT_DB_PATH=/app/data/telemetry.db
+
+EXPOSE 8000
 
 CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

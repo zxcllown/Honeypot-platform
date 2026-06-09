@@ -1,0 +1,11 @@
+.git
+.venv
+.venv-wsl
+**/__pycache__
+**/*.pyc
+frontend/.next
+frontend/node_modules
+frontend/tsconfig.tsbuildinfo
+backend/data/*.db-journal
+backend/data/*.db-wal
+backend/data/*.db-shm
