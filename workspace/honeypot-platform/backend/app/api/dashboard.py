@@ -3,7 +3,9 @@ import sqlite3
 from pathlib import Path
 from collections import Counter
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException, status
+
+from app.api.security import CurrentUser, get_current_user, require_admin
 
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -30,10 +32,19 @@ def fetch_all(query: str, params: tuple = ()):
 
 
 @router.get("/overview")
-def get_overview():
-    classified = fetch_all("SELECT * FROM classified_sessions")
-    telemetry = fetch_all("SELECT * FROM telemetry_analysis")
-    recommendations = fetch_all("SELECT * FROM adaptive_recommendations")
+def get_overview(current_user: CurrentUser = Depends(get_current_user)):
+    classified = fetch_all(
+        "SELECT * FROM classified_sessions WHERE user_id = ?",
+        (current_user.id,),
+    )
+    telemetry = fetch_all(
+        "SELECT * FROM telemetry_analysis WHERE user_id = ?",
+        (current_user.id,),
+    )
+    recommendations = fetch_all(
+        "SELECT * FROM adaptive_recommendations WHERE user_id = ?",
+        (current_user.id,),
+    )
 
     classification_counter = Counter()
     tactic_counter = Counter()
@@ -94,7 +105,11 @@ def get_overview():
 
 
 @router.get("/recent-sessions")
-def get_recent_sessions(limit: int = 20):
+def get_recent_sessions(
+    limit: int = 20,
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    limit = max(1, min(limit, 100))
     rows = fetch_all("""
         SELECT
             c.session_id,
@@ -112,9 +127,10 @@ def get_recent_sessions(limit: int = 20):
             ON c.session_id = t.session_id
         LEFT JOIN sandbox_runs s
             ON c.session_id = s.session_id
+        WHERE c.user_id = ?
         ORDER BY c.id DESC
         LIMIT ?
-    """, (limit,))
+    """, (current_user.id, limit))
 
     result = []
 
@@ -139,14 +155,14 @@ def get_recent_sessions(limit: int = 20):
 
 
 @router.get("/global-threat-view")
-def get_global_threat_view():
+def get_global_threat_view(_admin: CurrentUser = Depends(require_admin)):
     path = DB_PATH.parent / "global_threat_view.json"
 
     if not path.exists():
-        return {
-            "available": False,
-            "message": "global_threat_view.json not found",
-        }
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="global_threat_view.json not found",
+        )
 
     with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)

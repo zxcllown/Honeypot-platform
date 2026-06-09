@@ -7,8 +7,11 @@ from .schemas import BaseEvent, Streams
 class EventBus:
     def __init__(self):
         self._client = redis.Redis(
-            host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB,
-            decode_responses=True
+            host=REDIS_HOST,
+            port=REDIS_PORT,
+            db=REDIS_DB,
+            decode_responses=True,
+            health_check_interval=30,
         )
 
     def publish(self, stream: Streams, event: BaseEvent) -> str:
@@ -16,26 +19,42 @@ class EventBus:
         self._client.xadd(str(stream), {"data": json.dumps(data, ensure_ascii=False)})
         return event.event_id
 
-    def consume(self, stream: Streams, group: str, consumer: str,
-                block_ms: int = 5000, count: int = 10):
+    def consume(
+            self,
+            stream: Streams,
+            group: str,
+            consumer: str,
+            block_ms: int = 5000,
+            count: int = 10
+    ):
         try:
-            self._client.xgroup_create(str(stream), group, id='0', mkstream=True)
+            self._client.xgroup_create(
+                str(stream),
+                group,
+                id="0",
+                mkstream=True
+            )
         except redis.ResponseError:
             pass
 
-        events = self._client.xreadgroup(
-            groupname=group,
-            consumername=consumer,
-            streams={str(stream): '>'},
-            block=block_ms,
-            count=count
-        )
+        try:
+            events = self._client.xreadgroup(
+                groupname=group,
+                consumername=consumer,
+                streams={str(stream): ">"},
+                block=block_ms,
+                count=count
+            )
+        except redis.exceptions.TimeoutError:
+            return []
 
         result = []
+
         for _, messages in events:
             for msg_id, msg_data in messages:
-                data = json.loads(msg_data['data'])
+                data = json.loads(msg_data["data"])
                 result.append((msg_id, data))
+
         return result
 
     def ack(self, stream: Streams, group: str, event_id: str):

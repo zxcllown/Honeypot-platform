@@ -2,7 +2,9 @@ import json
 import sqlite3
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+
+from app.api.security import CurrentUser, get_current_user
 
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
@@ -34,7 +36,13 @@ def fetch_one(query: str, params: tuple = ()):
 
 
 @router.get("")
-def list_sessions(limit: int = 50, offset: int = 0):
+def list_sessions(
+    limit: int = 50,
+    offset: int = 0,
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    limit = max(1, min(limit, 100))
+    offset = max(0, offset)
     rows = fetch_all("""
         SELECT
             c.session_id,
@@ -52,9 +60,10 @@ def list_sessions(limit: int = 50, offset: int = 0):
             ON c.session_id = t.session_id
         LEFT JOIN sandbox_runs s
             ON c.session_id = s.session_id
+        WHERE c.user_id = ?
         ORDER BY c.id DESC
         LIMIT ? OFFSET ?
-    """, (limit, offset))
+    """, (current_user.id, limit, offset))
 
     items = []
 
@@ -83,14 +92,18 @@ def list_sessions(limit: int = 50, offset: int = 0):
 
 
 @router.get("/{session_id}")
-def get_session_detail(session_id: str):
+def get_session_detail(
+    session_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+):
     classification = fetch_one("""
         SELECT *
         FROM classified_sessions
         WHERE session_id = ?
+            AND user_id = ?
         ORDER BY id DESC
         LIMIT 1
-    """, (session_id,))
+    """, (session_id, current_user.id))
 
     if not classification:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -99,39 +112,44 @@ def get_session_detail(session_id: str):
         SELECT *
         FROM risk_decisions
         WHERE session_id = ?
+            AND user_id = ?
         ORDER BY id DESC
         LIMIT 1
-    """, (session_id,))
+    """, (session_id, current_user.id))
 
     sandbox = fetch_one("""
         SELECT *
         FROM sandbox_runs
         WHERE session_id = ?
+            AND user_id = ?
         ORDER BY id DESC
         LIMIT 1
-    """, (session_id,))
+    """, (session_id, current_user.id))
 
     telemetry = fetch_one("""
         SELECT *
         FROM telemetry_analysis
         WHERE session_id = ?
+            AND user_id = ?
         ORDER BY id DESC
         LIMIT 1
-    """, (session_id,))
+    """, (session_id, current_user.id))
 
     recommendations = fetch_all("""
         SELECT *
         FROM adaptive_recommendations
         WHERE session_id = ?
+            AND user_id = ?
         ORDER BY id ASC
-    """, (session_id,))
+    """, (session_id, current_user.id))
 
     actions = fetch_all("""
         SELECT *
         FROM adaptive_actions_log
         WHERE session_id = ?
+            AND user_id = ?
         ORDER BY id ASC
-    """, (session_id,))
+    """, (session_id, current_user.id))
 
     return {
         "session_id": session_id,
@@ -220,8 +238,11 @@ def get_session_detail(session_id: str):
 
 
 @router.get("/{session_id}/timeline")
-def get_session_timeline(session_id: str):
-    detail = get_session_detail(session_id)
+def get_session_timeline(
+    session_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    detail = get_session_detail(session_id, current_user)
 
     timeline = []
 
@@ -304,14 +325,18 @@ def get_session_timeline(session_id: str):
     }
 
 @router.get("/{session_id}/replay")
-def get_session_replay(session_id: str):
+def get_session_replay(
+    session_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+):
     sandbox = fetch_one("""
         SELECT *
         FROM sandbox_runs
         WHERE session_id = ?
+            AND user_id = ?
         ORDER BY id DESC
         LIMIT 1
-    """, (session_id,))
+    """, (session_id, current_user.id))
 
     if not sandbox:
         raise HTTPException(status_code=404, detail="Sandbox run not found")

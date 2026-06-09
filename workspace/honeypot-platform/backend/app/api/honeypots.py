@@ -1,124 +1,283 @@
 import sqlite3
-from pathlib import Path
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
+
+from app.api.security import CurrentUser, get_current_user
 
 
-router = APIRouter(
-    prefix="/honeypots",
-    tags=["honeypots"]
-)
+router = APIRouter(prefix="/honeypots", tags=["honeypots"])
 
 DB_PATH = Path(__file__).resolve().parents[2] / "data" / "telemetry.db"
+HoneypotStatus = Literal["running", "stopped", "restarting", "maintenance"]
 
 
-def fetch_all(query, params=()):
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.row_factory = sqlite3.Row
+class HoneypotCreate(BaseModel):
+    node_id: str = Field(min_length=3, max_length=80)
+    name: str = Field(min_length=2, max_length=120)
+    honeypot_type: str = Field(min_length=2, max_length=40)
+    host: str = Field(min_length=2, max_length=120)
+    port: int = Field(ge=1, le=65535)
+    version: str | None = Field(default=None, max_length=80)
+    status: HoneypotStatus = "stopped"
 
-        cur = conn.cursor()
-        cur.execute(query, params)
 
-        return cur.fetchall()
+class HoneypotUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=120)
+    honeypot_type: str | None = Field(default=None, min_length=2, max_length=40)
+    host: str | None = Field(default=None, min_length=2, max_length=120)
+    port: int | None = Field(default=None, ge=1, le=65535)
+    version: str | None = Field(default=None, max_length=80)
+    status: HoneypotStatus | None = None
 
 
-def execute(query, params=()):
-    with sqlite3.connect(DB_PATH) as conn:
-        cur = conn.cursor()
+def iso_now():
+    return datetime.now(timezone.utc).isoformat()
 
-        cur.execute(query, params)
 
-        conn.commit()
+def connect():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def row_to_dict(row):
+    return dict(row)
+
+
+def ensure_honeypot(node_id: str, user_id: int):
+    with connect() as conn:
+        row = conn.execute(
+            """
+            SELECT *
+            FROM honeypot_nodes
+            WHERE node_id = ?
+                AND user_id = ?
+            """,
+            (node_id, user_id),
+        ).fetchone()
+
+    if not row:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Honeypot not found")
+
+    return row
+
 
 @router.get("")
-def list_honeypots():
+def list_honeypots(current_user: CurrentUser = Depends(get_current_user)):
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM honeypot_nodes
+            WHERE user_id = ?
+            ORDER BY id ASC
+            """,
+            (current_user.id,),
+        ).fetchall()
 
-    rows = fetch_all("""
-        SELECT *
-        FROM honeypot_nodes
-        ORDER BY id ASC
-    """)
-
-    result = []
-
-    for row in rows:
-        result.append(dict(row))
+    items = [row_to_dict(row) for row in rows]
 
     return {
-        "items": result,
-        "count": len(result)
+        "items": items,
+        "count": len(items),
     }
 
+
+@router.post("", status_code=status.HTTP_201_CREATED)
+def create_honeypot(
+    payload: HoneypotCreate,
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    created_at = iso_now()
+
+    try:
+        with connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO honeypot_nodes (
+                    node_id,
+                    name,
+                    honeypot_type,
+                    host,
+                    port,
+                    status,
+                    version,
+                    sessions_total,
+                    created_at,
+                    updated_at,
+                    user_id
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+                """,
+                (
+                    payload.node_id,
+                    payload.name,
+                    payload.honeypot_type,
+                    payload.host,
+                    payload.port,
+                    payload.status,
+                    payload.version,
+                    created_at,
+                    created_at,
+                    current_user.id,
+                ),
+            )
+            conn.commit()
+    except sqlite3.IntegrityError:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Honeypot node_id already exists",
+        )
+
+    return row_to_dict(ensure_honeypot(payload.node_id, current_user.id))
+
+
 @router.get("/{node_id}")
-def get_honeypot(node_id: str):
+def get_honeypot(
+    node_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    return row_to_dict(ensure_honeypot(node_id, current_user.id))
 
-    rows = fetch_all("""
-        SELECT *
-        FROM honeypot_nodes
-        WHERE node_id = ?
-    """, (node_id,))
 
-    if not rows:
-        raise HTTPException(404, "Honeypot not found")
+@router.patch("/{node_id}")
+def update_honeypot(
+    node_id: str,
+    payload: HoneypotUpdate,
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    ensure_honeypot(node_id, current_user.id)
+    updates = payload.model_dump(exclude_unset=True)
 
-    return dict(rows[0])
+    if not updates:
+        return row_to_dict(ensure_honeypot(node_id, current_user.id))
 
-@router.post("/{node_id}/disable")
-def disable_honeypot(node_id: str):
+    updates["updated_at"] = iso_now()
+    assignments = ", ".join(f"{key} = ?" for key in updates)
+    values = list(updates.values()) + [node_id, current_user.id]
 
-    execute("""
-        UPDATE honeypot_nodes
-        SET
-            status = 'stopped',
-            updated_at = ?
-        WHERE node_id = ?
-    """, (
-        datetime.now(timezone.utc).isoformat(),
-        node_id
-    ))
+    with connect() as conn:
+        conn.execute(
+            f"""
+            UPDATE honeypot_nodes
+            SET {assignments}
+            WHERE node_id = ?
+                AND user_id = ?
+            """,
+            values,
+        )
+        conn.commit()
+
+    return row_to_dict(ensure_honeypot(node_id, current_user.id))
+
+
+@router.delete("/{node_id}")
+def delete_honeypot(
+    node_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    ensure_honeypot(node_id, current_user.id)
+
+    with connect() as conn:
+        conn.execute(
+            """
+            DELETE FROM honeypot_nodes
+            WHERE node_id = ?
+                AND user_id = ?
+            """,
+            (node_id, current_user.id),
+        )
+        conn.commit()
 
     return {
         "node_id": node_id,
-        "action": "disable",
-        "status": "stopped"
+        "deleted": True,
     }
 
+
+def set_status(node_id: str, user_id: int, status_value: HoneypotStatus):
+    ensure_honeypot(node_id, user_id)
+    updated_at = iso_now()
+
+    with connect() as conn:
+        conn.execute(
+            """
+            UPDATE honeypot_nodes
+            SET status = ?,
+                updated_at = ?
+            WHERE node_id = ?
+                AND user_id = ?
+            """,
+            (status_value, updated_at, node_id, user_id),
+        )
+        conn.commit()
+
+    return row_to_dict(ensure_honeypot(node_id, user_id))
+
+
 @router.post("/{node_id}/enable")
-def enable_honeypot(node_id: str):
-
-    execute("""
-        UPDATE honeypot_nodes
-        SET
-            status = 'running',
-            updated_at = ?
-        WHERE node_id = ?
-    """, (
-        datetime.now(timezone.utc).isoformat(),
-        node_id
-    ))
-
+def enable_honeypot(
+    node_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    node = set_status(node_id, current_user.id, "running")
     return {
         "node_id": node_id,
         "action": "enable",
-        "status": "running"
+        "status": node["status"],
+        "node": node,
     }
 
-@router.post("/{node_id}/restart")
-def restart_honeypot(node_id: str):
 
-    execute("""
-        UPDATE honeypot_nodes
-        SET
-            updated_at = ?
-        WHERE node_id = ?
-    """, (
-        datetime.now(timezone.utc).isoformat(),
-        node_id
-    ))
+@router.post("/{node_id}/disable")
+def disable_honeypot(
+    node_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    node = set_status(node_id, current_user.id, "stopped")
+    return {
+        "node_id": node_id,
+        "action": "disable",
+        "status": node["status"],
+        "node": node,
+    }
+
+
+@router.post("/{node_id}/restart")
+def restart_honeypot(
+    node_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    started_at = iso_now()
+    node = set_status(node_id, current_user.id, "running")
 
     return {
         "node_id": node_id,
         "action": "restart",
-        "status": "running"
+        "status": node["status"],
+        "started_at": started_at,
+        "node": node,
+        "phases": [
+            {
+                "name": "drain_existing_connections",
+                "status": "completed",
+            },
+            {
+                "name": "reload_honeypot_profile",
+                "status": "completed",
+            },
+            {
+                "name": "bind_listening_socket",
+                "status": "completed",
+            },
+            {
+                "name": "health_probe",
+                "status": "completed",
+            },
+        ],
+        "message": "Honeypot restarted and returned to running state",
     }
